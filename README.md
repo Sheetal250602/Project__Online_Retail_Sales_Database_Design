@@ -212,6 +212,33 @@ CROSS JOIN Payments s;
 
 <img width="1023" height="633" alt="image" src="https://github.com/user-attachments/assets/7eb81cf7-8d78-4ee3-aac4-069df159124b" />
 
+# Creating Views:
+CREATE VIEW SalesReport AS
+SELECT 
+  p.product_id, 
+  c.first_name, 
+  p.product_name, 
+  o.order_status, 
+  s.method, 
+  s.amount
+FROM Products p
+JOIN Customers c ON p.product_id = c.product_id
+JOIN Orders o ON c.customer_id = o.customer_id
+JOIN Payments s ON o.order_id = s.order_id;
 
+SELECT * FROM SalesReport;
 
+# <img width="601" height="296" alt="image" src="https://github.com/user-attachments/assets/ee569ff4-9425-46a4-a8aa-08b053708ebc" />
 
+# Some DDL Commands like DROP, TRUNCATE, ALTER, RENAME:
+
+DROP DATABASE database_name;
+
+DROP TABLE table_name;
+
+RENAME TABLE Table_Name To New_Table_Name;
+
+TRUNCATE TABLE table_name;
+
+ALTER TABLE table_name
+ADD column_name datatype;
