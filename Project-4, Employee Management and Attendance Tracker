@@ -1,0 +1,185 @@
+# Project4: Employee Management and Attendance Tracker
+# Using MySQL Workbench for creating Database 'employee_mgmt' and tables Departments, Roles, Employees and Attendance
+
+CREATE DATABASE employee_mgmt;
+USE employee_mgmt;
+
+# Departments Table
+CREATE TABLE Departments (
+    DeptID INT AUTO_INCREMENT PRIMARY KEY,
+    DeptName VARCHAR(100) NOT NULL
+);
+
+# Roles Table
+CREATE TABLE Roles (
+    RoleID INT AUTO_INCREMENT PRIMARY KEY,
+    RoleName VARCHAR(100) NOT NULL
+);
+
+# Employees Table
+CREATE TABLE Employees (
+    EmpID INT AUTO_INCREMENT PRIMARY KEY,
+    FirstName VARCHAR(50),
+    LastName VARCHAR(50),
+    Gender ENUM('Male','Female','Other'),
+    DeptID INT,
+    RoleID INT,
+    HireDate DATE,
+    Status ENUM('Active','Inactive') DEFAULT 'Active',
+    FOREIGN KEY (DeptID) REFERENCES Departments(DeptID),
+    FOREIGN KEY (RoleID) REFERENCES Roles(RoleID)
+);
+
+# Attendance Table
+CREATE TABLE Attendance (
+    AttID INT AUTO_INCREMENT PRIMARY KEY,
+    EmpID INT,
+    Date DATE,
+    CheckIn TIME,
+    CheckOut TIME,
+    Status ENUM('Present','Absent','Late','Half-Day') DEFAULT 'Present',
+    HoursWorked DECIMAL(5,2) DEFAULT 0,
+    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (EmpID) REFERENCES Employees(EmpID)
+);
+
+
+# Inserting Dummy Data to generate 200+ employees:
+
+-- Insert Departments
+INSERT INTO Departments (DeptName) VALUES
+('HR'), ('IT'), ('Finance'), ('Sales'), ('Operations');
+
+-- Insert Roles
+INSERT INTO Roles (RoleName) VALUES
+('Manager'), ('Executive'), ('Developer'), ('Analyst'), ('Intern');
+
+# Insert Employees (200 records using a loop)
+DELIMITER //
+CREATE PROCEDURE SeedEmployees()
+BEGIN
+    DECLARE i INT DEFAULT 1;
+    WHILE i <= 200 DO
+        INSERT INTO Employees (FirstName, LastName, Gender, DeptID, RoleID, HireDate)
+        VALUES (
+            CONCAT('Emp', i),
+            CONCAT('Last', i),
+            IF(i % 2 = 0, 'Male', 'Female'),
+            FLOOR(1 + (RAND()*5)),  -- random dept
+            FLOOR(1 + (RAND()*5)),  -- random role
+            DATE_SUB(CURDATE(), INTERVAL FLOOR(RAND()*1000) DAY)
+        );
+        SET i = i + 1;
+    END WHILE;
+END //
+DELIMITER ;
+
+CALL SeedEmployees();
+
+
+# For Attendance, insert random logs for testing:
+
+DELIMITER //
+CREATE PROCEDURE SeedAttendance()
+BEGIN
+    DECLARE i INT DEFAULT 1;
+    WHILE i <= 200 DO
+        INSERT INTO Attendance (EmpID, Date, CheckIn, CheckOut, Status, HoursWorked)
+        VALUES (
+            i,
+            CURDATE(),
+            '09:10:00',
+            '18:00:00',
+            IF(MINUTE('09:10:00') > 5, 'Late', 'Present'),
+            8.5
+        );
+        SET i = i + 1;
+    END WHILE;
+END //
+DELIMITER ;
+
+CALL SeedAttendance();
+
+# Adding Triggers, Automatically calculate HoursWorked when CheckOut is updated
+DELIMITER //
+CREATE TRIGGER trg_calculate_hours
+BEFORE UPDATE ON Attendance
+FOR EACH ROW
+BEGIN
+    IF NEW.CheckIn IS NOT NULL AND NEW.CheckOut IS NOT NULL THEN
+        SET NEW.HoursWorked = TIMESTAMPDIFF(MINUTE, NEW.CheckIn, NEW.CheckOut) / 60;
+    END IF;
+END //
+DELIMITER ;
+
+# Adding Triggers, Set status to 'Late' if CheckIn is after 09:05
+DELIMITER //
+CREATE TRIGGER trg_set_late
+BEFORE INSERT ON Attendance
+FOR EACH ROW
+BEGIN
+    IF NEW.CheckIn > '09:05:00' THEN
+        SET NEW.Status = 'Late';
+    END IF;
+END //
+DELIMITER ;
+
+
+# Creating Function: Total Work Hours for an Employee
+
+DELIMITER //
+CREATE FUNCTION GetTotalHours(p_EmpID INT, p_Month INT, p_Year INT)
+RETURNS DECIMAL(10,2)
+DETERMINISTIC
+BEGIN
+    DECLARE total_hours DECIMAL(10,2);
+    SELECT SUM(HoursWorked) INTO total_hours
+    FROM Attendance
+    WHERE EmpID = p_EmpID
+      AND MONTH(Date) = p_Month
+      AND YEAR(Date) = p_Year;
+    RETURN IFNULL(total_hours,0);
+END //
+DELIMITER ;
+
+# Calling Functions:
+select employee_mgmt.GetTotalHours(1, 7, 2025);
+
+# Retrieving data from all tables:
+
+SELECT * FROM Departments;
+SELECT * FROM Roles;
+SELECT * FROM Employees;
+SELECT * FROM Attendance;
+
+
+# Example Queries (Reports), Monthly Attendance Report
+
+SELECT e.EmpID, e.FirstName, e.LastName,
+       COUNT(a.AttID) AS DaysPresent,
+       SUM(a.HoursWorked) AS TotalHours
+FROM Employees e
+LEFT JOIN Attendance a ON e.EmpID = a.EmpID
+WHERE MONTH(a.Date) = MONTH(CURDATE())
+  AND YEAR(a.Date) = YEAR(CURDATE())
+GROUP BY e.EmpID
+ORDER BY DaysPresent DESC;
+
+# Late Arrivals Report
+
+SELECT e.EmpID, e.FirstName, e.LastName, COUNT(*) AS LateDays
+FROM Employees e
+JOIN Attendance a ON e.EmpID = a.EmpID
+WHERE a.Status = 'Late'
+GROUP BY e.EmpID
+HAVING COUNT(*) > 0
+ORDER BY LateDays DESC;
+
+#. Department-wise Average Hours
+
+SELECT d.DeptName, AVG(a.HoursWorked) AS AvgHours
+FROM Departments d
+JOIN Employees e ON d.DeptID = e.DeptID
+JOIN Attendance a ON e.EmpID = a.EmpID
+GROUP BY d.DeptName;
+
