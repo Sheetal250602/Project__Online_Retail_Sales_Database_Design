@@ -1,0 +1,132 @@
+# Project2: Student Result Processing System
+# Using MySQL Workbench for creating Database 'Student_Results' and tables Students, Courses, Grades and Semesters.
+
+CREATE DATABASE Student_Results;
+USE Student_Results;
+
+
+# Designing Schemas: Students, Courses, Semesters, Grades: 
+CREATE TABLE students(
+    student_id INT PRIMARY KEY NOT NULL,
+    student_name VARCHAR(100),
+    dob DATE,
+    gender ENUM('M', 'F', 'Other'),
+    department VARCHAR(50)
+);
+
+CREATE TABLE courses (
+    course_id INT PRIMARY KEY AUTO_INCREMENT,
+    course_name VARCHAR(100),
+    credit_hours INT,
+    department VARCHAR(50)
+);
+
+CREATE TABLE semesters (
+    semester_id INT PRIMARY KEY AUTO_INCREMENT,
+    semester_name VARCHAR(20),
+    year INT
+);
+
+CREATE TABLE grades (
+    grade_id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id INT,
+    course_id INT,
+    semester_id INT,
+    marks_obtained FLOAT,
+    grade CHAR(2),
+    gpa_point FLOAT,
+    FOREIGN KEY (student_id) REFERENCES students(student_id),
+    FOREIGN KEY (course_id) REFERENCES courses(course_id),
+    FOREIGN KEY (semester_id) REFERENCES semesters(semester_id)
+);
+
+# Inserting data into tables:
+INSERT INTO students (student_id, student_name, dob, gender, department) VALUES
+(1, 'Alice Johnson', '2001-05-12', 'F', 'CSE'),
+(2, 'Bob Smith', '2000-11-20', 'M', 'ECE'),
+(3, 'Charlie Brown', '2002-02-14', 'M', 'EEE'),
+(4, 'Diana Prince', '2001-08-25', 'F', 'CSE'),
+(5, 'Ethan Hunt', '1999-12-01', 'M', 'ME'),
+(6, 'Fatima Khan', '2003-03-15', 'F', 'CSE'),
+(7, 'George Miller', '2002-07-10', 'M', 'ECE'),
+(8, 'Hannah Lee', '2001-09-18', 'F', 'EEE'),
+(9, 'Ishaan Roy', '2000-10-05', 'M', 'CSE'),
+(10, 'Jenna Davis', '2002-01-30', 'F', 'CSE');
+
+INSERT INTO courses (course_id, course_name, credit_hours, department) VALUES
+(10, 'Database Systems', 3, 'CSE'),
+(20, 'Data Structures', 4, 'CSE'),
+(30, 'Electronics', 3, 'ECE'),
+(40, 'Thermodynamics', 3, 'ME'),
+(50, 'Signals and Systems', 4, 'EEE');
+
+INSERT INTO semesters (semester_name, year) VALUES
+('Summer', 2024),
+('Winter', 2025);
+
+# Added Triggers for gpa_point calculation before Inserting data into Grades:
+DELIMITER $$
+CREATE TRIGGER assign_grade_gpa
+BEFORE INSERT ON grades
+FOR EACH ROW
+BEGIN
+IF NEW.marks_obtained >= 90 THEN SET NEW.grade = 'A'; SET NEW.gpa_point = 4.0;
+ELSEIF NEW.marks_obtained >= 80 THEN SET NEW.grade = 'B'; SET NEW.gpa_point = 3.0;
+ELSEIF NEW.marks_obtained >= 70 THEN SET NEW.grade = 'C'; SET NEW.gpa_point = 2.0;
+ELSEIF NEW.marks_obtained >= 60 THEN SET NEW.grade = 'D'; SET NEW.gpa_point = 1.0;
+ELSE SET NEW.grade = 'F'; SET NEW.gpa_point = 0.0;
+END IF;
+END $$
+DELIMITER ;
+
+INSERT INTO grades (student_id, course_id, semester_id, marks_obtained) VALUES
+(1, 10, 1, 87), 
+(1, 20, 1, 72),
+(2, 30, 1, 66), 
+(2, 20, 1, 54),
+(3, 50, 1, 82), 
+(4, 10, 2, 92), 
+(4, 20, 2, 78),
+(5, 40, 1, 45), 
+(6, 10, 2, 88), 
+(7, 30, 1, 70), 
+(8, 50, 1, 60), 
+(9, 20, 1, 75),
+(10, 10, 1, 90);
+
+
+# Retrieving data from tables:
+SELECT * FROM Students;
+SELECT * FROM Courses;
+SELECT * FROM Semesters;
+SELECT * FROM Grades;
+
+# Write queries for gpa_point:
+SELECT 
+s.student_id,
+s.student_name,
+sem.semester_name,
+sem.year,
+ROUND(SUM(g.gpa_point * c.credit_hours) / SUM(c.credit_hours), 2) AS GPA
+FROM grades g
+JOIN students s ON g.student_id = s.student_id
+JOIN courses c ON g.course_id = c.course_id
+JOIN semesters sem ON g.semester_id = sem.semester_id
+GROUP BY s.student_id, sem.semester_id
+ORDER BY sem.year;-- Did't understand
+
+
+SELECT SUM(gpa_point) FROM Grades;
+SELECT SUM(credit_hours) FROM Courses;
+
+# Create rank lists using window functions:
+SELECT * FROM 
+(SELECT marks_obtained, RANK() OVER(ORDER BY marks_obtained DESC) R FROM Grades) AS Ranking;
+
+# Export semester-wise result summary:
+SELECT sem.semester_name, sem.year, g.marks_obtained FROM Semesters sem
+JOIN Grades g
+ON sem.semester_id = g.semester_id
+ORDER BY g.marks_obtained;
+
+
