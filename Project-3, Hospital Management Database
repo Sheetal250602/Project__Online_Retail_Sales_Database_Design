@@ -1,0 +1,141 @@
+# Project3: Hospital Management Database
+# Using MySQL Workbench for creating Database 'HMS' and tables Patients, Doctors, Visits and Bills.
+
+CREATE DATABASE HMS;
+USE HMS;
+
+# Model Schemas for Patients, Doctors, Visits and Bills.
+CREATE TABLE Patients (
+    PatientID INT AUTO_INCREMENT PRIMARY KEY,
+    Name VARCHAR(100),
+    Age INT,
+    Gender VARCHAR(10),
+    Contact VARCHAR(20),
+    Status VARCHAR(50) DEFAULT 'Admitted'
+);
+
+-- Doctors Table
+CREATE TABLE Doctors (
+    DoctorID INT AUTO_INCREMENT PRIMARY KEY,
+    Name VARCHAR(100),
+    Specialization VARCHAR(50),
+    Contact VARCHAR(20)
+);
+
+-- Visits Table
+CREATE TABLE Visits (
+    VisitID INT AUTO_INCREMENT PRIMARY KEY,
+    PatientID INT,
+    DoctorID INT,
+    VisitDate DATE,
+    Diagnosis VARCHAR(200),
+    FOREIGN KEY (PatientID) REFERENCES Patients(PatientID),
+    FOREIGN KEY (DoctorID) REFERENCES Doctors(DoctorID)
+);
+
+-- Bills Table
+CREATE TABLE Bills (
+    BillID INT AUTO_INCREMENT PRIMARY KEY,
+    PatientID INT,
+    VisitID INT,
+    Amount DECIMAL(10,2),
+    Paid DECIMAL(10,2),
+    Balance DECIMAL(10,2),
+    FOREIGN KEY (PatientID) REFERENCES Patients(PatientID),
+    FOREIGN KEY (VisitID) REFERENCES Visits(VisitID)
+);
+
+# Inserting Sample Records
+
+-- Patients
+INSERT INTO Patients (PatientID, Name, Age, Gender, Contact) VALUES
+(1, 'Ravi Kumar', 35, 'Male', '9876543210'),
+(2, 'Sheetal Mehta', 28, 'Female', '9876501234'),
+(3, 'Anil Sharma', 42, 'Male', '9823456789'),
+(4, 'Priya Verma', 30, 'Female', '9812345678'),
+(5, 'Rahul Singh', 50, 'Male', '9898765432');
+
+-- Doctors
+INSERT INTO Doctors (DoctorID, Name, Specialization, Contact) VALUES
+(10, 'Dr. Arjun Patel', 'Cardiology', '9000011111'),
+(20, 'Dr. Neha Gupta', 'Dermatology', '9000022222'),
+(30, 'Dr. Karan Malhotra', 'Orthopedics', '9000033333'),
+(40, 'Dr. Meera Joshi', 'Pediatrics', '9000044444'),
+(50, 'Dr. Ramesh Iyer', 'General Medicine', '9000055555');
+
+-- Visits
+INSERT INTO Visits (VisitID, PatientID, DoctorID, VisitDate, Diagnosis) VALUES
+(1, 1, 10, '2025-09-01', 'Chest Pain'),
+(2, 2, 20, '2025-09-01', 'Skin Allergy'),
+(3, 3, 30, '2025-09-02', 'Knee Pain'),
+(4, 4, 40, '2025-09-02', 'Fever'),
+(5, 5, 50, '2025-09-02', 'General Checkup');
+
+-- Bills
+INSERT INTO Bills (BillID, PatientID, VisitID, Amount, Paid, Balance) VALUES
+(100, 1, 1, 2000, 1500, 500),
+(200, 2, 2, 1200, 1200, 0),
+(300, 3, 3, 1800, 1000, 800),
+(400, 4, 4, 1000, 500, 500),
+(500, 5, 5, 800, 800, 0);
+
+# Retrieving data from tables.
+SELECT * FROM Patients;
+SELECT * FROM Doctors;
+SELECT * FROM Visits;
+SELECT * FROM Bills;
+
+
+# Queries for Appointments & Payments, Showing all upcoming appointments
+SELECT v.VisitID, p.Name AS Patient, d.Name AS Doctor, v.VisitDate, v.Diagnosis
+FROM Visits v
+JOIN Patients p ON v.PatientID = p.PatientID
+JOIN Doctors d ON v.DoctorID = d.DoctorID
+ORDER BY v.VisitDate;
+
+-- Show pending payments
+SELECT b.BillID, p.Name AS Patient, b.Amount, b.Paid, b.Balance
+FROM Bills b
+JOIN Patients p ON b.PatientID = p.PatientID
+WHERE b.Balance > 0;
+
+
+# Stored Procedure for Billing Calculation
+
+DELIMITER //
+CREATE PROCEDURE SimpleUpdateBalance(IN p_BillID INT)
+BEGIN
+UPDATE Bills
+SET Balance = Amount - Paid
+WHERE BillID = p_BillID;
+END //
+DELIMITER ;
+
+CALL SimpleUpdateBalance(100);
+
+# Triggers for Discharge & Status Updates:
+
+DELIMITER //
+CREATE TRIGGER discharge_patient
+AFTER UPDATE ON Bills
+FOR EACH ROW
+BEGIN
+    IF NEW.Balance = 0 THEN
+        UPDATE Patients
+        SET Status = 'Discharged'
+        WHERE PatientID = NEW.PatientID;
+    END IF;
+END //
+DELIMITER ;
+
+
+#  Generate Visit Reports, Patient Visit Report:
+SELECT v.VisitID, p.Name AS Patient, d.Name AS Doctor, v.VisitDate, v.Diagnosis
+FROM Visits v
+JOIN Patients p ON v.PatientID = p.PatientID
+JOIN Doctors d ON v.DoctorID = d.DoctorID;
+
+# Billing Report:
+SELECT b.BillID, p.Name AS Patient, b.Amount, b.Paid, b.Balance
+FROM Bills b
+JOIN Patients p ON b.PatientID = p.PatientID;
