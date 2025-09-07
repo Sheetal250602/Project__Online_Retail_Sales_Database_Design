@@ -1,0 +1,135 @@
+# Project5: Inventory and Warehouse Management System
+# Using MySQL Workbench for creating Database 'warehouse_mgmt' and tables Products, Warehouses, Suppliers and Stock.
+
+CREATE DATABASE warehouse_mgmt;
+USE warehouse_mgmt;
+
+CREATE TABLE Products (
+    product_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_name VARCHAR(100) NOT NULL,
+    category VARCHAR(50),
+    reorder_level INT DEFAULT 10
+);
+
+-- Warehouses table
+CREATE TABLE Warehouses (
+    warehouse_id INT AUTO_INCREMENT PRIMARY KEY,
+    warehouse_name VARCHAR(100) NOT NULL,
+    location VARCHAR(100)
+);
+
+-- Suppliers table
+CREATE TABLE Suppliers (
+    supplier_id INT AUTO_INCREMENT PRIMARY KEY,
+    supplier_name VARCHAR(100) NOT NULL,
+    contact_info VARCHAR(150)
+);
+
+-- Stock table (relation between product & warehouse)
+CREATE TABLE Stock (
+    stock_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT,
+    warehouse_id INT,
+    supplier_id INT,
+    quantity INT DEFAULT 0,
+    FOREIGN KEY (product_id) REFERENCES Products(product_id),
+    FOREIGN KEY (warehouse_id) REFERENCES Warehouses(warehouse_id),
+    FOREIGN KEY (supplier_id) REFERENCES Suppliers(supplier_id)
+);
+
+# Inserting Sample Inventory Records:
+INSERT INTO Products (product_id, product_name, category, reorder_level)
+VALUES 
+(1, 'Laptop', 'Electronics', 5),
+(2, 'Mouse', 'Accessories', 20),
+(3, 'Chair', 'Furniture', 10);
+
+INSERT INTO Warehouses (warehouse_id, warehouse_name, location)
+VALUES 
+(1, 'Central WH', 'New York'),
+(2, 'East WH', 'Boston');
+
+INSERT INTO Suppliers (supplier_id, supplier_name, contact_info)
+VALUES 
+(1, 'TechSupplier Inc.', 'tech@supplier.com'),
+(2, 'FurniCo', 'contact@furnico.com');
+
+INSERT INTO Stock (stock_id, product_id, warehouse_id, supplier_id, quantity)
+VALUES 
+(1, 1, 1, 1, 50),
+(2, 2, 1, 1, 15),
+(3, 3, 2, 2, 5);
+
+
+# Retrieving data from tables:
+SELECT * FROM Products;
+SELECT * FROM Warehouses;
+SELECT * FROM Suppliers;
+SELECT * FROM Stock;
+
+# Create queries to check stock levels and reorder alerts:
+
+# Check stock levels:
+SELECT p.product_name, w.warehouse_name, s.quantity
+FROM Stock s
+JOIN Products p ON s.product_id = p.product_id
+JOIN Warehouses w ON s.warehouse_id = w.warehouse_id;
+
+# Reorder alerts (low stock):
+SELECT p.product_name, w.warehouse_name, s.quantity, p.reorder_level
+FROM Stock s
+JOIN Products p ON s.product_id = p.product_id
+JOIN Warehouses w ON s.warehouse_id = w.warehouse_id
+WHERE s.quantity < p.reorder_level;
+
+# Trigger for Low-Stock Notification:
+DELIMITER //
+CREATE TRIGGER low_stock_alert
+AFTER UPDATE ON Stock
+FOR EACH ROW
+BEGIN
+IF NEW.quantity < (SELECT reorder_level FROM Products WHERE product_id = NEW.product_id) THEN
+INSERT INTO Notifications (message, created_at)
+VALUES (CONCAT('Low stock alert: ', NEW.product_id, ' in warehouse ', NEW.warehouse_id), NOW());
+END IF;
+END //
+DELIMITER ;
+
+
+# Notifications table for alerts:
+CREATE TABLE Notifications (
+    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+    message VARCHAR(255),
+    created_at DATETIME
+);
+
+# Stored Procedure to Transfer Stock:
+DELIMITER //
+CREATE PROCEDURE transfer_stock(
+    IN p_product_id INT,
+    IN p_from_warehouse INT,
+    IN p_to_warehouse INT,
+    IN p_quantity INT
+)
+BEGIN
+    -- Deduct from source warehouse
+    UPDATE Stock
+    SET quantity = quantity - p_quantity
+    WHERE product_id = p_product_id AND warehouse_id = p_from_warehouse;
+
+    -- Add to destination warehouse
+    INSERT INTO Stock (product_id, warehouse_id, supplier_id, quantity)
+    VALUES (p_product_id, p_to_warehouse, NULL, p_quantity)
+    ON DUPLICATE KEY UPDATE quantity = quantity + p_quantity;
+END//
+DELIMITER ;
+
+
+# Test the System, Transfer 5 Laptops from Central WH (1) to East WH (2)
+CALL transfer_stock(1, 1, 2, 5);
+
+# Update stock to trigger low stock alert
+UPDATE Stock SET quantity = 3 WHERE stock_id = 2;
+
+-- Check notifications
+SELECT * FROM Notifications;
