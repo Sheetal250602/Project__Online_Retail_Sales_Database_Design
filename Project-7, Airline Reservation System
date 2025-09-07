@@ -1,0 +1,140 @@
+# Project7: Airline Reservation System
+# Using MySQL Workbench for creating Database 'LMS' and tables Flights, Customers, Bookings and Seats.
+
+CREATE DATABASE ARS;
+USE ARS;
+
+CREATE TABLE Flights (
+    flight_id INT AUTO_INCREMENT PRIMARY KEY,
+    flight_number VARCHAR(20) UNIQUE NOT NULL,
+    origin VARCHAR(50) NOT NULL,
+    destination VARCHAR(50) NOT NULL,
+    departure_time DATETIME NOT NULL,
+    arrival_time DATETIME NOT NULL
+);
+
+-- Customers
+CREATE TABLE Customers (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    phone VARCHAR(15)
+);
+
+-- Seats
+CREATE TABLE Seats (
+    seat_id INT AUTO_INCREMENT PRIMARY KEY,
+    flight_id INT,
+    seat_number VARCHAR(5),
+    is_available BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (flight_id) REFERENCES Flights(flight_id),
+    UNIQUE (flight_id, seat_number)
+);
+
+-- Bookings
+CREATE TABLE Bookings (
+    booking_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
+    flight_id INT,
+    seat_id INT,
+    booking_date DATETIME DEFAULT NOW(),
+    status ENUM('Booked','Cancelled') DEFAULT 'Booked',
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id),
+    FOREIGN KEY (flight_id) REFERENCES Flights(flight_id),
+    FOREIGN KEY (seat_id) REFERENCES Seats(seat_id)
+);
+
+
+-- 2. Inserting Sample Data
+-- Flights
+INSERT INTO Flights (flight_id, flight_number, origin, destination, departure_time, arrival_time) VALUES
+(1, 'AI101', 'New York', 'London', '2023-09-20 08:00:00', '2023-09-20 20:00:00'),
+(2, 'AI202', 'London', 'Paris', '2023-09-21 10:00:00', '2023-09-21 12:00:00');
+
+-- Customers
+INSERT INTO Customers (customer_id, name, email, phone) VALUES
+(1, 'Alice Johnson', 'alice@example.com', '1234567890'),
+(2, 'Bob Smith', 'bob@example.com', '9876543210');
+
+-- Seats (Flight 1 → 5 seats, Flight 2 → 3 seats)
+INSERT INTO Seats (flight_id, seat_number) VALUES
+(1, '1A'), (1, '1B'), (1, '1C'), (1, '2A'), (1, '2B'),
+(2, '1A'), (2, '1B'), (2, '1C');
+
+-- Bookings
+INSERT INTO Bookings (booking_id, customer_id, flight_id, seat_id, status) VALUES
+(1, 1, 1, 1, 'Booked'),  -- Alice booked seat 1A on Flight AI101
+(2, 2, 2, 6, 'Booked');  -- Bob booked seat 1A on Flight AI202
+
+
+-- 3. Creating Views: Available seats per flight
+CREATE VIEW AvailableSeats AS
+SELECT f.flight_number, s.seat_number
+FROM Seats s
+JOIN Flights f ON s.flight_id = f.flight_id
+LEFT JOIN Bookings b ON s.seat_id = b.seat_id AND b.status = 'Booked'
+WHERE b.seat_id IS NULL;
+
+
+-- 4. Triggers
+DELIMITER //
+-- Mark seat unavailable after booking
+CREATE TRIGGER after_booking_insert
+AFTER INSERT ON Bookings
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'Booked' THEN
+        UPDATE Seats SET is_available = FALSE WHERE seat_id = NEW.seat_id;
+    END IF;
+END//
+
+-- Mark seat available if booking is cancelled
+CREATE TRIGGER after_booking_update
+AFTER UPDATE ON Bookings
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'Cancelled' THEN
+        UPDATE Seats SET is_available = TRUE WHERE seat_id = NEW.seat_id;
+    END IF;
+END//
+DELIMITER ;
+
+
+-- 5. Reports (Queries)
+-- Booking Summary Report
+SELECT f.flight_number, 
+       COUNT(b.booking_id) AS total_bookings,
+       SUM(CASE WHEN b.status = 'Booked' THEN 1 ELSE 0 END) AS active_bookings,
+       SUM(CASE WHEN b.status = 'Cancelled' THEN 1 ELSE 0 END) AS cancelled_bookings
+FROM Flights f
+LEFT JOIN Bookings b ON f.flight_id = b.flight_id
+GROUP BY f.flight_number;
+
+-- Customer Booking History
+SELECT c.name, f.flight_number, s.seat_number, b.status, b.booking_date
+FROM Bookings b
+JOIN Customers c ON b.customer_id = c.customer_id
+JOIN Flights f ON b.flight_id = f.flight_id
+JOIN Seats s ON b.seat_id = s.seat_id
+ORDER BY c.name, b.booking_date;
+
+
+-- 6. Test Section
+
+-- Check available seats view
+SELECT * FROM AvailableSeats;
+
+-- Cancel Alice’s booking (to test trigger)
+UPDATE Bookings SET status = 'Cancelled' WHERE booking_id = 1;
+
+-- Check available seats again
+SELECT * FROM AvailableSeats;
+
+-- Booking summary after cancellation
+SELECT f.flight_number, 
+       COUNT(b.booking_id) AS total_bookings,
+       SUM(CASE WHEN b.status = 'Booked' THEN 1 ELSE 0 END) AS active_bookings,
+       SUM(CASE WHEN b.status = 'Cancelled' THEN 1 ELSE 0 END) AS cancelled_bookings
+FROM Flights f
+LEFT JOIN Bookings b ON f.flight_id = b.flight_id
+GROUP BY f.flight_number;
