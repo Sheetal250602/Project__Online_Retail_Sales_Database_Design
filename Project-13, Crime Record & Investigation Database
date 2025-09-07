@@ -1,0 +1,129 @@
+# Project13: Crime Record & Investigation Database
+# Using MySQL Workbench for creating Database 'crime_db' and tables Cases, Suspects, Officers and Evidence.
+
+CREATE DATABASE crime_db;
+USE crime_db;
+
+ # Officers Table
+CREATE TABLE Officers (
+    officer_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    officer_rank VARCHAR(50),
+    hire_date DATE
+);
+
+-- Cases Table
+CREATE TABLE Cases (
+    case_id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    status ENUM('Open','Closed','Under Investigation') DEFAULT 'Open',
+    lead_officer_id INT,
+    start_date DATE,
+    end_date DATE,
+    FOREIGN KEY (lead_officer_id) REFERENCES Officers(officer_id)
+);
+
+-- Suspects Table
+CREATE TABLE Suspects (
+    suspect_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    age INT,
+    gender ENUM('Male','Female','Other')
+);
+
+-- Evidence Table
+CREATE TABLE Evidence (
+    evidence_id INT AUTO_INCREMENT PRIMARY KEY,
+    case_id INT,
+    description TEXT,
+    collected_date DATE,
+    chain_status VARCHAR(50) DEFAULT 'Intact',
+    FOREIGN KEY (case_id) REFERENCES Cases(case_id)
+);
+
+-- EvidenceLog Table
+CREATE TABLE EvidenceLog (
+    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    evidence_id INT,
+    old_status VARCHAR(50),
+    new_status VARCHAR(50),
+    changed_date DATETIME,
+    FOREIGN KEY (evidence_id) REFERENCES Evidence(evidence_id)
+);
+
+-- Indexing for faster searches
+CREATE INDEX idx_case_id ON Cases(case_id);
+CREATE INDEX idx_suspect_name ON Suspects(name);
+
+-- 2. Insert Sample Data, Officers
+INSERT INTO Officers (name, officer_rank, hire_date) VALUES
+('John Doe', 'Detective', '2015-03-10'),
+('Jane Smith', 'Inspector', '2012-06-21'),
+('Mark Brown', 'Sergeant', '2018-01-15');
+
+-- Cases
+INSERT INTO Cases (title, description, status, lead_officer_id, start_date, end_date) VALUES
+('Bank Robbery', 'Armed robbery at downtown bank', 'Closed', 1, '2023-05-01', '2023-05-05'),
+('Cyber Fraud', 'Fraudulent online transactions', 'Open', 2, '2023-06-01', NULL),
+('Burglary', 'Home burglary in suburban area', 'Under Investigation', 3, '2023-06-10', NULL);
+
+-- Suspects
+INSERT INTO Suspects (name, age, gender) VALUES
+('Alex Johnson', 30, 'Male'),
+('Mia Davis', 25, 'Female'),
+('Robert Lee', 40, 'Male');
+
+-- Evidence
+INSERT INTO Evidence (case_id, description, collected_date) VALUES
+(1, 'CCTV footage of the robbery', '2023-05-01'),
+(1, 'Fingerprint on vault', '2023-05-02'),
+(2, 'Transaction logs', '2023-06-02'),
+(3, 'Broken window glass', '2023-06-11');
+
+
+-- 3. Queries – Case Analysis, Count of cases by status
+SELECT status, COUNT(*) AS case_count
+FROM Cases
+GROUP BY status;
+
+-- Open cases with lead officer
+SELECT c.title, c.status, o.name AS lead_officer
+FROM Cases c
+JOIN Officers o ON c.lead_officer_id = o.officer_id
+WHERE c.status = 'Open';
+
+
+-- 4. Views – Officer Workload
+CREATE VIEW OfficerWorkload AS
+SELECT o.name AS officer_name, o.officer_rank,
+       COUNT(c.case_id) AS total_cases,
+       SUM(CASE WHEN c.status='Closed' THEN 1 ELSE 0 END) AS closed_cases,
+       SUM(CASE WHEN c.status='Open' THEN 1 ELSE 0 END) AS open_cases
+FROM Officers o
+LEFT JOIN Cases c ON o.officer_id = c.lead_officer_id
+GROUP BY o.officer_id;
+
+-- Test view
+SELECT * FROM OfficerWorkload;
+
+
+-- 5. Trigger – Evidence Chain Update
+
+DELIMITER //
+CREATE TRIGGER update_chain_status
+AFTER UPDATE ON Evidence
+FOR EACH ROW
+BEGIN
+    IF NEW.chain_status <> OLD.chain_status THEN
+        INSERT INTO EvidenceLog(evidence_id, old_status, new_status, changed_date)
+        VALUES (NEW.evidence_id, OLD.chain_status, NEW.chain_status, NOW());
+    END IF;
+END//
+DELIMITER ;
+
+
+
+
+
+
