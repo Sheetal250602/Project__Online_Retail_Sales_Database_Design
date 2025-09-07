@@ -1,0 +1,165 @@
+# Project6: Library Management System
+# Using MySQL Workbench for creating Database 'LMS' and tables Books, Authors, Members and Loans.
+
+CREATE DATABASE LMS;
+USE LMS;
+
+-- Books table
+CREATE TABLE Books (
+    book_id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    publication_year INT,
+    isbn VARCHAR(20) UNIQUE
+);
+
+-- Authors table
+CREATE TABLE Authors (
+    author_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL
+);
+
+-- Bridge table (Book  Author many-to-many)
+CREATE TABLE BookAuthors (
+    book_id INT,
+    author_id INT,
+    PRIMARY KEY (book_id, author_id),
+    FOREIGN KEY (book_id) REFERENCES Books(book_id),
+    FOREIGN KEY (author_id) REFERENCES Authors(author_id)
+);
+
+-- Members table
+CREATE TABLE Members (
+    member_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    membership_date DATE
+);
+
+-- Loans table
+CREATE TABLE Loans (
+    loan_id INT AUTO_INCREMENT PRIMARY KEY,
+    book_id INT,
+    member_id INT,
+    loan_date DATE,
+    due_date DATE,
+    return_date DATE,
+    FOREIGN KEY (book_id) REFERENCES Books(book_id),
+    FOREIGN KEY (member_id) REFERENCES Members(member_id)
+);
+
+-- Notifications table (for alerts)
+CREATE TABLE Notifications (
+    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+    message VARCHAR(255),
+    created_at DATETIME
+);
+
+
+-- 2. Inserting Test Data
+
+INSERT INTO Books (book_id, title, publication_year, isbn) VALUES
+(1, 'The Great Gatsby', 1925, '9780743273565'),
+(2, 'To Kill a Mockingbird', 1960, '9780061120084'),
+(3, '1984', 1949, '9780451524935');
+
+-- Authors
+INSERT INTO Authors (author_id, name) VALUES 
+(1, 'F. Scott Fitzgerald'),
+(2, 'Harper Lee'),
+(3, 'George Orwell');
+
+-- Book and Author mapping
+INSERT INTO BookAuthors (book_id, author_id) VALUES 
+(1,1),
+(2,2),
+(3,3);
+
+-- Members
+INSERT INTO Members (member_id, name, email, membership_date) VALUES
+(1, 'Alice Johnson', 'alice@example.com', '2021-01-15'),
+(2, 'Bob Smith', 'bob@example.com', '2021-06-10');
+
+-- Loans
+INSERT INTO Loans (loan_id, book_id, member_id, loan_date, due_date, return_date) VALUES
+(1, 1, 1, '2023-08-01', '2023-08-15', NULL),  -- overdue
+(2, 2, 2, '2023-07-20', '2023-08-05', '2023-08-02'), -- returned
+(3, 3, 1, '2023-08-10', '2023-08-25', NULL); -- still active
+
+# Retrieving data from tables:
+SELECT * FROM Books;
+SELECT * FROM Authors;
+SELECT * FROM BookAuthors;
+SELECT * FROM Members;
+SELECT * FROM Loans;
+
+
+# Creating Views:
+-- Borrowed (active loans)
+CREATE VIEW BorrowedBooks AS
+SELECT m.name AS member_name, b.title, l.loan_date, l.due_date
+FROM Loans l
+JOIN Members m ON l.member_id = m.member_id
+JOIN Books b ON l.book_id = b.book_id
+WHERE l.return_date IS NULL;
+
+-- Overdue books
+CREATE VIEW OverdueBooks AS
+SELECT m.name AS member_name, b.title, l.loan_date, l.due_date
+FROM Loans l
+JOIN Members m ON l.member_id = m.member_id
+JOIN Books b ON l.book_id = b.book_id
+WHERE l.return_date IS NULL AND l.due_date < CURDATE();
+
+
+# Trigger (Due Date Notification)
+
+DELIMITER //
+CREATE TRIGGER due_date_alert
+AFTER INSERT ON Loans
+FOR EACH ROW
+BEGIN
+    IF NEW.due_date < CURDATE() THEN
+        INSERT INTO Notifications (message, created_at)
+        VALUES (CONCAT('Overdue loan created: Book ', NEW.book_id, 
+                       ' for Member ', NEW.member_id), NOW());
+    END IF;
+END//
+DELIMITER ;
+
+# Reports (Queries)
+-- Total books borrowed per member
+SELECT m.name, COUNT(l.loan_id) AS total_borrowed
+FROM Members m
+LEFT JOIN Loans l ON m.member_id = l.member_id
+GROUP BY m.name;
+
+-- Most borrowed books
+SELECT b.title, COUNT(l.loan_id) AS times_borrowed
+FROM Books b
+JOIN Loans l ON b.book_id = l.book_id
+GROUP BY b.title
+ORDER BY times_borrowed DESC
+LIMIT 5;
+
+-- Active loans per author
+SELECT a.name AS author, COUNT(l.loan_id) AS active_loans
+FROM Authors a
+JOIN BookAuthors ba ON a.author_id = ba.author_id
+JOIN Books b ON ba.book_id = b.book_id
+JOIN Loans l ON b.book_id = l.book_id
+WHERE l.return_date IS NULL
+GROUP BY a.name;
+
+# Test
+-- View borrowed books
+SELECT * FROM BorrowedBooks;
+
+-- View overdue books
+SELECT * FROM OverdueBooks;
+
+-- Force a loan that is already overdue to test trigger
+INSERT INTO Loans (book_id, member_id, loan_date, due_date, return_date)
+VALUES (1, 2, '2023-07-01', '2023-07-10', NULL);
+
+-- Check notifications
+SELECT * FROM Notifications;
