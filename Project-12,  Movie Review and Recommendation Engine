@@ -1,0 +1,113 @@
+# Project12: Movie Review and Recommendation Engine
+# Using MySQL Workbench for creating Database 'movie_db' and tables Movies, Ratings, Users and Reviews.
+
+CREATE DATABASE movie_db;
+USE movie_db;
+
+-- Users Table
+CREATE TABLE Users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    join_date DATE DEFAULT (CURRENT_DATE())
+);
+
+-- Movies Table
+CREATE TABLE Movies (
+    movie_id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    genre VARCHAR(50),
+    release_year INT
+);
+
+-- Ratings Table
+CREATE TABLE Ratings (
+    rating_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    movie_id INT,
+    rating INT CHECK(rating BETWEEN 1 AND 10),
+    rating_date DATE DEFAULT (CURRENT_DATE()),
+    FOREIGN KEY (user_id) REFERENCES Users(user_id),
+    FOREIGN KEY (movie_id) REFERENCES Movies(movie_id),
+    UNIQUE (user_id, movie_id)
+);
+
+-- Reviews Table
+CREATE TABLE Reviews (
+    review_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    movie_id INT,
+    review_text TEXT,
+    review_date DATE DEFAULT (CURRENT_DATE()),
+    FOREIGN KEY (user_id) REFERENCES Users(user_id),
+    FOREIGN KEY (movie_id) REFERENCES Movies(movie_id)
+);
+
+# 2. Inserting Sample Data
+-- Users
+INSERT INTO Users (username, email) VALUES
+('alice', 'alice@mail.com'),
+('bob', 'bob@mail.com'),
+('charlie', 'charlie@mail.com');
+
+-- Movies
+INSERT INTO Movies (title, genre, release_year) VALUES
+('Inception', 'Sci-Fi', 2010),
+('The Dark Knight', 'Action', 2008),
+('Interstellar', 'Sci-Fi', 2014),
+('Titanic', 'Romance', 1997),
+('Avengers: Endgame', 'Action', 2019);
+
+-- Ratings
+INSERT INTO Ratings (user_id, movie_id, rating) VALUES
+(1, 1, 9),
+(1, 2, 8),
+(2, 1, 10),
+(2, 3, 9),
+(3, 4, 7),
+(3, 5, 9);
+
+-- Reviews
+INSERT INTO Reviews (user_id, movie_id, review_text) VALUES
+(1, 1, 'Mind-blowing movie!'),
+(1, 2, 'Epic action scenes.'),
+(2, 1, 'Amazing concept and execution.'),
+(2, 3, 'Great visuals and story.'),
+(3, 4, 'Emotional and timeless.'),
+(3, 5, 'Best superhero movie ever.');
+
+# Average rating and ranking queries.
+SELECT m.title, AVG(r.rating) AS avg_rating, COUNT(r.rating_id) AS total_ratings
+FROM Movies m
+LEFT JOIN Ratings r ON m.movie_id = r.movie_id
+GROUP BY m.title
+ORDER BY avg_rating DESC;
+
+-- Top 5 movies by average rating
+SELECT m.title, AVG(r.rating) AS avg_rating
+FROM Movies m
+JOIN Ratings r ON m.movie_id = r.movie_id
+GROUP BY m.title
+ORDER BY avg_rating DESC
+LIMIT 5;
+
+# Create views for recommended movies.
+CREATE VIEW RecommendedMovies AS
+SELECT m.title, m.genre, AVG(r.rating) AS avg_rating
+FROM Movies m
+JOIN Ratings r ON m.movie_id = r.movie_id
+GROUP BY m.title, m.genre
+HAVING AVG(r.rating) >= 8
+ORDER BY avg_rating DESC;
+
+-- Test view
+SELECT * FROM RecommendedMovies;
+
+
+# Using window functions to track top-rated content.
+SELECT m.movie_id, m.title, AVG(r.rating) AS avg_rating,
+DENSE_RANK() OVER (ORDER BY AVG(r.rating) DESC) AS rating_rank
+FROM Movies m
+JOIN Ratings r ON m.movie_id = r.movie_id
+GROUP BY m.movie_id, m.title;
+
