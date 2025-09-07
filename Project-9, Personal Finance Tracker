@@ -1,0 +1,101 @@
+# Project9: Personal Finance Tracker
+# Using MySQL Workbench for creating Database 'finance_db' and tables Users, Income, Expenses and Categories.
+
+CREATE DATABASE finance_db;
+USE finance_db;
+
+# Users Table
+CREATE TABLE Users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL
+);
+
+-- Categories Table (Income/Expense types)
+CREATE TABLE Categories (
+    category_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    type ENUM('Income','Expense') NOT NULL
+);
+
+-- Income Table
+CREATE TABLE Income (
+    income_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    category_id INT,
+    amount DECIMAL(10,2) NOT NULL,
+    income_date DATE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id),
+    FOREIGN KEY (category_id) REFERENCES Categories(category_id)
+);
+
+-- Expenses Table
+CREATE TABLE Expenses (
+    expense_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    category_id INT,
+    amount DECIMAL(10,2) NOT NULL,
+    expense_date DATE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id),
+    FOREIGN KEY (category_id) REFERENCES Categories(category_id)
+);
+
+
+-- 2. Inserting Dummy Data
+-- Users
+INSERT INTO Users (name, email) VALUES
+('Alice Johnson', 'alice@example.com'),
+('Bob Smith', 'bob@example.com');
+
+-- Categories
+INSERT INTO Categories (name, type) VALUES
+('Salary','Income'),
+('Freelance','Income'),
+('Food','Expense'),
+('Rent','Expense'),
+('Entertainment','Expense');
+
+-- Income
+INSERT INTO Income (user_id, category_id, amount, income_date) VALUES
+(1, 1, 5000, '2023-08-01'),
+(1, 2, 1200, '2023-08-10'),
+(2, 1, 6000, '2023-08-05');
+
+-- Expenses
+INSERT INTO Expenses (user_id, category_id, amount, expense_date) VALUES
+(1, 3, 500, '2023-08-02'),
+(1, 4, 1500, '2023-08-03'),
+(1, 5, 200, '2023-08-15'),
+(2, 3, 700, '2023-08-06'),
+(2, 4, 2000, '2023-08-07');
+
+
+-- 3. Queries – Reports, Monthly Expense Summary
+SELECT user_id,
+       DATE_FORMAT(expense_date, '%Y-%m') AS month,
+       SUM(amount) AS total_expenses
+FROM Expenses
+GROUP BY user_id, month;
+
+-- Category-Wise Spending
+SELECT u.name, c.name AS category, SUM(e.amount) AS total_spent
+FROM Expenses e
+JOIN Users u ON e.user_id = u.user_id
+JOIN Categories c ON e.category_id = c.category_id
+GROUP BY u.name, c.name
+ORDER BY u.name, total_spent DESC;
+
+
+-- 4. Creating Views – Balance Tracking
+CREATE VIEW BalanceTracking AS
+SELECT u.user_id, u.name,
+       COALESCE(SUM(i.amount),0) AS total_income,
+       COALESCE(SUM(e.amount),0) AS total_expenses,
+       (COALESCE(SUM(i.amount),0) - COALESCE(SUM(e.amount),0)) AS balance
+FROM Users u
+LEFT JOIN Income i ON u.user_id = i.user_id
+LEFT JOIN Expenses e ON u.user_id = e.user_id
+GROUP BY u.user_id, u.name;
+
+-- Test the view
+SELECT * FROM BalanceTracking;
