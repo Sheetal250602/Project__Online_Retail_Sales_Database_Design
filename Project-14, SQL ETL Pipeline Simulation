@@ -1,0 +1,95 @@
+# Project14: SQL ETL Pipeline Simulation by using MySQL Workbench using Database 'etl_demo'.
+
+CREATE DATABASE etl_demo;
+USE etl_demo;
+
+-- STEP 1: Create & Populate RAW DATA in Staging
+
+CREATE TABLE staging_employees (
+    emp_id INT,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    email VARCHAR(100),
+    department VARCHAR(50),
+    salary DECIMAL(10,2),
+    hire_date DATE
+);
+
+# Insert RAW DATA directly
+INSERT INTO staging_employees (emp_id, first_name, last_name, email, department, salary, hire_date) VALUES
+(101, 'John', 'Doe', 'john.doe@example.com', 'HR', 50000, '2018-03-15'),
+(102, 'Alice', 'Smith', 'alice.smith@example.com', 'IT', 60000, '2019-07-23'),
+(103, 'Bob', 'Johnson', 'bob.johnson@example.com', 'Finance', 55000, '2020-01-10'),
+(104, 'David', 'Brown', 'david.brown@example.com', 'IT', 65000, '2017-09-05'),
+(105, 'Eva', 'Miller', 'eva.miller@example.com', 'HR', 62000, '2021-06-30'),
+(106, 'Frank', 'Wilson', 'frank.wilson@example.com', 'Finance', 58000, '2020-11-11'),
+(103, 'Bob', 'Johnson', 'bob.duplicate@example.com', 'Finance', 56000, '2022-01-01'), -- duplicate
+(107, NULL, 'Green', 'null.email@example.com', 'IT', 61000, '2019-04-14'),            -- NULL first_name
+(108, 'Linda', 'White', 'linda.white@example.com', NULL, 57000, '2020-08-19'),        -- NULL department
+(109, 'Tom', 'King', 'tom.king@example.com', 'Finance', NULL, '2021-12-01');          -- NULL salary
+
+
+# Data Cleaning (Remove NULLs, Duplicates), Remove rows with NULL values in key fields
+
+SET SQL_SAFE_UPDATES = 0;
+
+DELETE FROM staging_employees
+WHERE emp_id IS NULL
+   OR first_name IS NULL
+   OR email IS NULL
+   OR department IS NULL
+   OR salary IS NULL;
+
+-- Remove duplicates (keep latest hire_date)
+DELETE s1 FROM staging_employees s1
+INNER JOIN staging_employees s2
+WHERE s1.emp_id = s2.emp_id
+AND s1.hire_date < s2.hire_date;
+
+
+# Transform & Load into Production
+
+CREATE TABLE production_employees (
+    emp_id INT PRIMARY KEY,
+    full_name VARCHAR(100),
+    email VARCHAR(100) UNIQUE,
+    department VARCHAR(50),
+    salary DECIMAL(10,2),
+    hire_year INT
+);
+
+# Insert cleaned + transformed data
+INSERT INTO production_employees (emp_id, full_name, email, department, salary, hire_year)
+SELECT 
+    emp_id,
+    CONCAT(first_name, ' ', last_name),
+    email,
+    department,
+    salary,
+    YEAR(hire_date)
+FROM staging_employees;
+
+# Audit Table
+
+CREATE TABLE etl_audit (
+    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    table_name VARCHAR(50),
+    rows_inserted INT,
+    load_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+# Insert log for current load
+INSERT INTO etl_audit (table_name, rows_inserted)
+SELECT 'production_employees', COUNT(*) FROM production_employees;
+
+# Trigger for Auto Logging:
+
+DELIMITER $$
+CREATE TRIGGER after_employee_insert
+AFTER INSERT ON production_employees
+FOR EACH ROW
+BEGIN
+    INSERT INTO etl_audit (table_name, rows_inserted)
+    VALUES ('production_employees', 1);
+END $$
+DELIMITER ;
